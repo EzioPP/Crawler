@@ -3,8 +3,7 @@ import time
 import requests
 from bs4 import BeautifulSoup
 from multiprocessing import current_process
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 def extract_text_and_links(url):
     try:
@@ -19,3 +18,5 @@ def extract_text_and_links(url):
     except Exception as e:
         print(f"[{current_process().name}] Error with {url}: {e}")
         return url, "", []
+
+

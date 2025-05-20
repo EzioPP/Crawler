@@ -1,9 +1,11 @@
 from multiprocessing import Manager, Pool
 from .worker import worker
-from utils import normalize_link
+
 from logger import get_logger
 
 logger = get_logger(__name__)
+def normalize_link(link, base_url):
+    return base_url + link if link.startswith('/') else link
 
 def worker_wrapper(args):
     url, base_url, function = args
@@ -32,8 +34,6 @@ def start_scraping(base_url, max_depth, function, processes=12):
             if not current_batch:
                 logger.info("No more URLs to process. Exiting loop.")
                 break
-
-            # Passa função junto para o worker_wrapper
             current_batch_with_func = [(url, base_url, function) for url, base_url, depth in current_batch]
             output = pool.map(worker_wrapper, current_batch_with_func)
 
@@ -48,3 +48,4 @@ def start_scraping(base_url, max_depth, function, processes=12):
 
     logger.info(f"Scraping finished. {len(results)} pages scraped.")
     return list(results)
+

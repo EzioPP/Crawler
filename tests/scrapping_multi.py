@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import time
-from multiprocessing import Manager, Pool, current_process
+from multiprocessing import Manager, Pool, current_process,cpu_count
 
 
 def extract_text_and_links(url):
@@ -28,10 +28,11 @@ def start_scraping(base_url, max_depth):
     manager = Manager()
     visited = manager.dict()
     results = manager.list()
+    processes = cpu_count() - 1
 
     to_visit = manager.list([(base_url, 0)])
 
-    with Pool(processes=12) as pool:
+    with Pool(processes=processes) as pool:
         while to_visit:
             current_batch = []
             next_round = []
