@@ -1,18 +1,50 @@
+import multiprocessing
 from multiprocessing import Manager, Pool
 from .worker import worker
 
 from logger import get_logger
 
 logger = get_logger(__name__)
+
+
 def normalize_link(link, base_url):
     return base_url + link if link.startswith('/') else link
+
 
 def worker_wrapper(args):
     url, base_url, function = args
     return worker((url, base_url), function)
 
 
+def _compute_batch_embeddings(args):
+    embedding_function, batch_docs = args
+    logger.info(f"Processando batch com {len(batch_docs)} documentos em processo {multiprocessing.current_process().name}")
+    embs = embedding_function(batch_docs)
+    logger.info(f"Finalizado batch em processo {multiprocessing.current_process().name}")
+    return embs
+
+
+def compute_embeddings_parallel(embedding_function, documents, batch_size=50, processes=None):
+    total = len(documents)
+    logger.info(f"Iniciando computação paralela de embeddings para {total} documentos, batch_size={batch_size}")
+    batches = [
+        documents[i : i + batch_size] for i in range(0, total, batch_size)
+    ]
+
+    logger.info(f"Total de batches para processar: {len(batches)}")
+    args = [(embedding_function, batch) for batch in batches]
+    with multiprocessing.Pool(processes=processes) as pool:
+        results = pool.map(_compute_batch_embeddings, args)
+    embeddings = [emb for batch_embs in results for emb in batch_embs]
+
+    logger.info("Finalizada computação paralela de embeddings para todos os documentos")
+    return embeddings
+
+
 def start_scraping(base_url, max_depth, function, processes=12):
+    """
+    Start web scraping with multiprocessing
+    """
     manager = Manager()
     visited = manager.dict()
     results = manager.list()
@@ -48,4 +80,3 @@ def start_scraping(base_url, max_depth, function, processes=12):
 
     logger.info(f"Scraping finished. {len(results)} pages scraped.")
     return list(results)
-

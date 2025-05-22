@@ -1,14 +1,13 @@
 import os
 import sys
-import multiprocessing
 
 import chromadb
-import ollama
+import ollama #TODO Adicionar suporte a openai para rodar em nuvem
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from logger import get_logger
-
+from modules.process_manager.master import compute_embeddings_parallel
 logger = get_logger(__name__)
 
 MODEL = "llama3.2"
@@ -29,35 +28,6 @@ class OllamaEmbeddingFunction:
         return embeddings
 
 
-def _compute_batch_embeddings(args):
-    embedding_function, batch_docs = args
-    logger.info(f"Processando batch com {len(batch_docs)} documentos em processo {multiprocessing.current_process().name}")
-    embs = embedding_function(batch_docs)
-    logger.info(f"Finalizado batch em processo {multiprocessing.current_process().name}")
-    return embs
-
-
-def compute_embeddings_parallel(embedding_function, documents, batch_size=30):
-    total = len(documents)
-    logger.info(f"Iniciando computação paralela de embeddings para {total} documentos, batch_size={batch_size}")
-
-    batches = [
-        documents[i : i + batch_size] for i in range(0, total, batch_size)
-    ]
-
-    logger.info(f"Total de batches para processar: {len(batches)}")
-
-    args = [(embedding_function, batch) for batch in batches]
-
-    with multiprocessing.Pool() as pool:
-        results = pool.map(_compute_batch_embeddings, args)
-
-    embeddings = [emb for batch_embs in results for emb in batch_embs]
-
-    logger.info("Finalizada computação paralela de embeddings para todos os documentos")
-    return embeddings
-
-
 def get_prompt(query, context):
     return f"""
     Baseado no texto, responda a pergunta a seguir.
@@ -72,7 +42,6 @@ def get_ollama_response(query, context, model=MODEL):
     logger.info(f"Gerando resposta para a query: {query}")
     logger.debug(f"Prompt enviado para modelo:\n{prompt}")
     print(f"Prompt: {prompt}")
-    input("Pressione Enter para continuar...")
     response = ollama.generate(model=model, prompt=prompt)
     logger.info(f"Resposta gerada para a query: {query}")
     return response["response"]
@@ -155,11 +124,13 @@ def batch_add(collection, documents, metadatas, ids, embeddings, batch_size=200)
 
 
 def populate_collection(collection, crawled_data):
+
+    
     chunks, metadatas, ids = split_into_chunks(crawled_data)
     logger.info(f"Total de chunks: {len(chunks)}")
 
     embedding_function = OllamaEmbeddingFunction()
-    embeddings = compute_embeddings_parallel(embedding_function, chunks, batch_size=30)
+    embeddings = compute_embeddings_parallel(embedding_function, chunks, batch_size=50)
     batch_add(collection, chunks, metadatas, ids, embeddings, batch_size=200)
 
     logger.info(f"Adicionado total de {len(chunks)} chunks na coleção.")
@@ -183,7 +154,6 @@ def process_query(collection, query_text, ammount=3):
     )
     print("-+-" * 20)
     logger.info(f"Consulta: {results}")
-    input()
     if results and len(results["documents"]) > 0:
         documents = results["documents"]
         metadatas = results["metadatas"]
@@ -195,11 +165,8 @@ def process_query(collection, query_text, ammount=3):
 
         metadata = results["metadatas"]
         print("Sending", query_text, context)
-        input("Pressione Enter para continuar...")
         response = get_ollama_response(query_text, context)
-        logger.info(f"Resposta para a pergunta '{query_text}': {response}")
-        logger.info(f"Contexto: {context}")
-        logger.info(f"Metadata: {metadata}")
+        logger.info(f"Resposta para a pergunta '{query_text}': {response}")     
     else:
         logger.warning(f"Nenhum resultado encontrado para a consulta: {query_text}")
 
