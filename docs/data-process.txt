@@ -1,0 +1,7 @@
+1 - user inserts url and depth level
+2 - url is scrapped
+3.1 - data is added to the database
+3.2 - urls are added to the queue
+4 - if queue is not empty, go to 2
+5 - if queue is empty, or depth level is reached, stop
+6 - allow user to browse the database using llm
