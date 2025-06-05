@@ -167,6 +167,7 @@ def process_query(collection, query_text, ammount=3):
         print("Sending", query_text, context)
         response = get_ollama_response(query_text, context)
         logger.info(f"Resposta para a pergunta '{query_text}': {response}")     
+        return response
     else:
         logger.warning(f"Nenhum resultado encontrado para a consulta: {query_text}")
 

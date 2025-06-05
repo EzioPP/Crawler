@@ -1,9 +1,13 @@
 
+import os
+import sys
 import time
 import requests
 from bs4 import BeautifulSoup
 from multiprocessing import current_process
-
+from logger import get_logger
+sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
+logger = get_logger(__name__)
 
 def extract_text_and_links(url):
     headers = {
@@ -23,8 +27,8 @@ def extract_text_and_links(url):
         text = soup.get_text(separator='\n', strip=True)
         links = [a['href'] for a in soup.find_all('a', href=True)]
         elapsed = time.time() - start
-        print(f"[{current_process().name}] Scraped {url} in {elapsed:.2f}s, found {len(links)} links.")
+        logger.info(f"[{current_process().name}] Scraped {url} in {elapsed:.2f}s, found {len(links)} links.")
         return url, text, links
     except Exception as e:
-        print(f"[{current_process().name}] Error with {url}: {e}")
+        logger.error(f"[{current_process().name}] Error with {url}: {e}")
         return url, "", []

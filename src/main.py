@@ -23,167 +23,171 @@ from modules.persistency import (
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-def write_json_file(data, filename):
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=4)
-
-def read_json_file(filename):
-    with open(filename, 'r') as f:
-        return json.load(f)
-    
-def append_json_file(data, filename):
-    try:
-        with open(filename, 'r') as f:
-            existing_data = json.load(f)
-    except FileNotFoundError:
-        existing_data = []
-    existing_data.append(data)
-    with open(filename, 'w') as f:
-        json.dump(existing_data, f, indent=4)
-
-def scrape_and_save(base_url, max_depth, processes):
+def scrape_and_save(base_url, max_depth, processes, vector_db_enabled=True):
     logger = get_logger(__name__)
     logger.info("Starting the web scraping process...")
     pages_raw = start_scraping(base_url, max_depth, extract_text_and_links, processes)
     logger.info(f"Scraping finished. {len(pages_raw)} pages scraped.")
-
     pages = [(page['url'], page['text']) for page in pages_raw]
     logger.info(f"Saving {len(pages)} pages to the Sqlite database...")
     save_many_pages(pages)
     logger.info("Data saved successfully.")
-    
     return pages
 
 def setup_vector_db(pages):
     logger = get_logger(__name__)
-    
     logger.info("Starting vector database population...")
     chroma_client = initialize_chromadb()
     embedding_function = OllamaEmbeddingFunction()
     collection = create_collection(chroma_client, "text", embedding_function)
-    
     crawled_data = [{"url": url, "content": content} for url, content in pages]
     populate_collection(collection, crawled_data)
+    logger.info("Process completed successfully!")
     return collection
 
-def interactive_ai_session(collection):
-    print("\n" + "="*50)
-    print("         AI QUESTION SESSION")
-    print("="*50)
-    print("Enter your questions (type 'quit' to exit):")
+def clear_databases():
+    logger = get_logger(__name__)
+    try:
+        logger.info("Databases cleared successfully!")
+    except Exception as e:
+        logger.error(f"Error clearing databases: {e}")
+        print(f"✗ Erro ao limpar bancos de dados: {e}")
+
+def search_word(word):
+    logger = get_logger(__name__)
+    try:
+        logger.info(f"Searching for word: {word}")
+        print(f"Procurando por '{word}' nos dados coletados...")
+        results = count_words(word)
+        if results:
+            print(f"✓ Palavra '{word}' encontrada {results} vezes.")
+        else:
+            print(f"✗ Palavra '{word}' não encontrada nos dados coletados.")
+    except Exception as e:
+        logger.error(f"Error searching for word: {e}")
+        print(f"✗ Erro ao procurar palavra: {e}")
+
+def ai_query(collection, query):
+    logger = get_logger(__name__)
+    try:
+        if collection is None:
+            print("✗ IA não está habilitada. Execute o scraping com IA primeiro.")
+            return
+        logger.info(f"Processing AI query: {query}")
+        result = process_query(collection, query)
+        print(f"Resultado da Consulta IA: {result}")
+    except Exception as e:
+        logger.error(f"Error processing AI query: {e}")
+        print(f"✗ Erro ao processar consulta IA: {e}")
+
+def get_scraping_mode():
+    print("\n=== MODO DE COLETA ===")
+    print("1. Web scraping com IA (Banco de Dados Vetorial)")
+    print("2. Web scraping sem IA (SQLite apenas)")
     
     while True:
-        question = input("\nQuestion: ").strip()
-        if question.lower() in ['quit', 'exit', 'q']:
-            break
-        if question:
-            process_query(collection, question, 6)
+        choice = input("Escolha o modo de coleta (1-2): ").strip()
+        if choice == "1":
+            return True
+        elif choice == "2":
+            return False
         else:
-            print("Please enter a valid question.")
+            print("Escolha inválida. Digite 1 ou 2.")
 
-def search_words_in_pages(keyword):
-    print("\n" + "="*50)
-    print("         WORD SEARCH")
-    print("="*50)
-    print("Enter words to search (type 'quit' to exit):")
+def get_scraping_parameters():
+    print("\n=== PARÂMETROS DE COLETA ===")
     
-    wordcount = count_words(keyword)
-    print(f"Total words in database: {wordcount}")
-def run_streamlit():
-    try:
-        subprocess.Popen(["streamlit", "run", "src/modules/interface/app.py"])
-    except Exception as e:
-        print(f"Error running Streamlit: {e}")
-
-def clear_streamlit_files():
-    try:
-        os.remove("streamlit_in.json")
-        os.remove("streamlit_out.json")
-    except FileNotFoundError:
-        pass
-
-def await_input():
+    base_url = input("Digite a URL do site para coletar: ").strip()
+    if not base_url.startswith(('http://', 'https://')):
+        base_url = 'https://' + base_url
+    
     while True:
         try:
-            with open("streamlit_out.json", "r") as f:
-                data = json.load(f)
-                if data:
-                    break
-        except FileNotFoundError:
-            pass
-        time.sleep(1)
-    return data
-
-def display_menu():
-    print("\n" + "="*50)
-    print("         WEB CRAWLER & AI ASSISTANT")
-    print("="*50)
-    print("1. Run with Streamlit interface")
-    print("2. Run terminal mode (scraping only)")
-    print("3. Run terminal mode (scraping + AI)")
-    print("4. Run terminal mode (scraping + word search)")
-    print("5. Exit")
-    print("="*50)
-
-def get_user_input():
-    base_url = input("Enter base URL: ").strip()
-    max_depth = int(input("Enter max depth (default 3): ") or 3)
-    processes = int(input("Enter number of processes (default 12): ") or 12)
+            max_depth = int(input("Digite o nível máximo de profundidade (ex: 2): ").strip())
+            break
+        except ValueError:
+            print("Digite um número válido para a profundidade.")
+    
+    while True:
+        try:
+            processes = int(input("Digite o número de processos (ex: 4): ").strip())
+            break
+        except ValueError:
+            print("Digite um número válido para processos.")
+    
     return base_url, max_depth, processes
 
-def terminal_mode(use_ai=False, use_search=False):
-    base_url, max_depth, processes = get_user_input()
-    
-    print(f"\nStarting scraping...")
-    print(f"URL: {base_url}")
-    print(f"Max depth: {max_depth}")
-    print(f"Processes: {processes}")
-    print(f"AI processing: {'Enabled' if use_ai else 'Disabled'}")
-    print(f"Word search: {'Enabled' if use_search else 'Disabled'}")
-    
-    pages = scrape_and_save(base_url, max_depth, processes)
-    
-    if use_ai:
-        collection = setup_vector_db(pages)
-        interactive_ai_session(collection)
-    elif use_search:
-        keyword = input("Enter word to search: ").strip()
-        search_words_in_pages(keyword)
-    
-    print("\nProcess completed!")
-
-def streamlit_mode():
-    clear_streamlit_files()
-    run_streamlit()
-    data = await_input()
-    
-    base_url = data.get("base_url")
-    max_depth = data.get("max_depth")
-    question = data.get("question")
-    processes = data.get("processes")
-    
-    pages = scrape_and_save(base_url, max_depth, processes)
-    collection = setup_vector_db(pages)
-    process_query(collection, question, 6)
-
-def main():
+def main_menu(collection=None):
     while True:
-        display_menu()
-        choice = input("Select an option (1-5): ").strip()
+        print("\n" + "="*50)
+        print("           MENU WEB CRAWLER")
+        print("="*50)
+        print("1. Buscar uma palavra nos dados coletados")
+        if collection is not None:
+            print("2. Consulta IA (Busca vetorial)")
+        else:
+            print("2. Consulta IA (Indisponível - IA não habilitada)")
+        print("3. Limpar todos os bancos de dados")
+        print("4. Sair")
+        print("="*50)
+        
+        choice = input("Escolha uma opção (1-4): ").strip()
         
         if choice == "1":
-            streamlit_mode()
+            word = input("Digite a palavra para buscar: ").strip()
+            if word:
+                search_word(word)
+        
         elif choice == "2":
-            terminal_mode(use_ai=False, use_search=False)
+            if collection is not None:
+                query = input("Digite sua consulta IA: ").strip()
+                if query:
+                    ai_query(collection, query)
+            else:
+                print("✗ Consultas IA não estão disponíveis. Execute o scraping com IA habilitada primeiro.")
+        
         elif choice == "3":
-            terminal_mode(use_ai=True, use_search=False)
+            confirm = input("Tem certeza que deseja limpar todos os bancos de dados? (s/N): ").strip().lower()
+            if confirm == 's':
+                clear_databases()
+        
         elif choice == "4":
-            terminal_mode(use_ai=False, use_search=True)
-        elif choice == "5":
-            print("Goodbye!")
+            print("Até logo!")
             break
+        
         else:
-            print("Invalid option. Please try again.")
+            print("Escolha inválida. Digite 1-4.")
+
+def main():
+    logger = get_logger(__name__)
+    collection = None
+    
+    print("🕷️  Bem-vindo ao Aplicativo Web Crawler!")
+    
+    vector_db_enabled = get_scraping_mode()
+    
+    base_url, max_depth, processes = get_scraping_parameters()
+    
+    print(f"\n=== INICIANDO COLETA ===")
+    print(f"URL: {base_url}")
+    print(f"Profundidade Máxima: {max_depth}")
+    print(f"Processos: {processes}")
+    print(f"IA Habilitada: {'Sim' if vector_db_enabled else 'Não'}")
+    
+    try:
+        pages = scrape_and_save(base_url, max_depth, processes, vector_db_enabled)
+        
+        if vector_db_enabled:
+            collection = setup_vector_db(pages)
+            print("✓ Coleta com IA concluída com sucesso!")
+        else:
+            print("✓ Coleta concluída com sucesso!")
+        
+        main_menu(collection)
+        
+    except Exception as e:
+        logger.error(f"Error in main process: {e}")
+        print(f"✗ Erro: {e}")
 
 if __name__ == "__main__":
     main()
