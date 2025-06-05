@@ -1,5 +1,6 @@
 import multiprocessing
 from multiprocessing import Manager, Pool
+import time
 from .worker import worker
 
 from logger import get_logger
@@ -50,6 +51,7 @@ def start_scraping(base_url, max_depth, function, processes=12):
     results = manager.list()
     to_visit = manager.list([(base_url, 0)])
     logger.info(f"Starting scraping: {base_url} up to depth {max_depth} with {processes} processes.")
+    start = time.time()
 
     with Pool(processes=processes) as pool:
         while to_visit:
@@ -71,12 +73,11 @@ def start_scraping(base_url, max_depth, function, processes=12):
 
             for (url, depth), (url_result, text, links) in zip([(u, d) for u, _, d in current_batch], output):
                 results.append({'url': url_result, 'text': text, 'links': links})
-                logger.info(f"Scraped: {url_result} with {len(links)} links found.")
                 for link in links:
                     full_link = normalize_link(link, base_url)
                     if full_link.startswith(base_url) and full_link not in visited:
                         next_round.append((full_link, depth + 1))
             to_visit.extend(next_round)
 
-    logger.info(f"Scraping finished. {len(results)} pages scraped.")
+    logger.info(f"Scraping finished. {len(results)} pages scraped. Time taken: {time.time() - start:.2f} seconds.")
     return list(results)
